@@ -164,20 +164,6 @@ so the two entry points stay consistent.
 
 ---
 
-## Publishing to Figma Community
-
-When the plugin is tested and ready to share:
-
-1. Go to your [Figma plugin dashboard](https://www.figma.com/developers)
-2. Click **New plugin** and upload the manifest
-3. Add a description, icon, and cover image
-4. Submit for review (usually takes a few days)
-
-Note: the `id` field in `manifest.json` will need to be updated
-to the numeric ID Figma assigns when you register the plugin.
-
----
-
 ## Contributing
 
 Agent Ready is open source under Owl-Listener. Fork it, break it,
