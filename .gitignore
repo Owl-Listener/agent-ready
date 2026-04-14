@@ -1,0 +1,21 @@
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor/IDE folders
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (in case you add any tooling later)
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Build artifacts / backups
+*.zip
+dist/
+build/

@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* ── Reset & Base ── */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  :root {
+    --volt: #CEFF00;
+    --black: #0A0A0A;
+    --dark: #111111;
+    --card: #161616;
+    --dim: rgba(255,255,255,0.28);
+    --faint: rgba(255,255,255,0.08);
+    --red: #FF3B3B;
+    --orange: #FF8C42;
+    --yellow: #FFE566;
+    --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --mono: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  }
+
+  body {
+    background: var(--black);
+    color: #fff;
+    font-family: var(--font);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 20px 24px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-title {
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--volt);
+    letter-spacing: -0.01em;
+  }
+  .header-credit {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--dim);
+    letter-spacing: 0.12em;
+  }
+
+  /* ── Score Ring ── */
+  .ring-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 24px 12px;
+  }
+  .ring-wrap {
+    position: relative;
+    width: 164px;
+    height: 164px;
+  }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-track { fill: none; stroke: var(--faint); stroke-width: 8; }
+  .ring-progress {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(0.16, 1, 0.3, 1),
+                stroke 0.4s ease;
+  }
+  .ring-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .ring-score {
+    font-size: 56px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+  .ring-subtitle {
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-top: 6px;
+  }
+
+  /* ── Scanning state ── */
+  .scanning {
+    height: 164px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--faint);
+    border-top-color: var(--volt);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  .scanning-text {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+  /* ── Stat Pills ── */
+  .stats {
+    display: flex;
+    margin: 0 24px 20px;
+    background: var(--dark);
+    border-radius: 14px;
+    border: 1px solid var(--faint);
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    padding: 12px 0;
+  }
+  .stat-value {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .stat-label {
+    font-size: 8px;
+    font-weight: 800;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    margin-top: 5px;
+  }
+  .stat-divider {
+    width: 1px;
+    background: var(--faint);
+    margin: 10px 0;
+  }
+
+  /* ── Scan Button ── */
+  .scan-wrap { padding: 0 24px 24px; }
+  .scan-btn {
+    width: 100%;
+    height: 52px;
+    background: var(--volt);
+    color: var(--black);
+    border: none;
+    border-radius: 26px;
+    font-size: 13px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: var(--font);
+  }
+  .scan-btn:hover { filter: brightness(1.1); }
+  .scan-btn:active { transform: scale(0.98); }
+  .scan-btn.scanning {
+    background: var(--dark);
+    color: var(--dim);
+    cursor: not-allowed;
+  }
+
+  /* ── Error ── */
+  .error-msg {
+    margin: 0 24px 16px;
+    padding: 12px 16px;
+    background: rgba(255, 59, 59, 0.1);
+    border: 1px solid rgba(255, 59, 59, 0.2);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--red);
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* ── Results ── */
+  .results { padding: 0 24px 24px; }
+
+  /* ── Tier ── */
+  .tier { margin-bottom: 4px; }
+  .tier-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 0 6px;
+  }
+  .tier-line {
+    width: 18px;
+    height: 2px;
+    border-radius: 1px;
+  }
+  .tier-label {
+    font-size: 9px;
+    font-weight: 900;
+    color: var(--dim);
+    letter-spacing: 0.18em;
+  }
+
+  /* ── Check Row ── */
+  .check-row { border-bottom: 1px solid var(--faint); }
+  .check-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #fff;
+    text-align: left;
+    font-family: var(--font);
+  }
+  .check-btn:hover { opacity: 0.85; }
+
+  /* Mini arc */
+  .mini-arc {
+    position: relative;
+    width: 34px; height: 34px;
+    flex-shrink: 0;
+  }
+  .mini-arc svg { transform: rotate(-90deg); }
+  .mini-arc-track { fill: none; stroke: var(--faint); stroke-width: 3; }
+  .mini-arc-progress {
+    fill: none; stroke-width: 3; stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s ease-out;
+  }
+  .mini-arc-value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .check-info { flex: 1; min-width: 0; }
+  .check-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 0.06em;
+  }
+  .check-issues {
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 2px;
+  }
+  .check-chevron {
+    font-size: 16px;
+    color: var(--dim);
+    font-weight: 300;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+  .check-chevron.open { transform: rotate(90deg); }
+
+  /* ── Details panel ── */
+  .check-details {
+    padding: 0 0 16px 46px;
+    display: none;
+  }
+  .check-details.open { display: block; }
+  .check-desc {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    line-height: 1.55;
+    margin-bottom: 12px;
+  }
+  .detail-card {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border-left: 3px solid transparent;
+  }
+  .detail-layer {
+    font-size: 11px;
+    font-weight: 600;
+    color: #E0E0E0;
+    font-family: var(--mono);
+  }
+  .detail-path {
+    font-size: 9px;
+    color: rgba(255,255,255,0.22);
+    margin-top: 2px;
+    font-family: var(--mono);
+  }
+  .detail-fix {
+    font-size: 11px;
+    color: var(--volt);
+    margin-top: 6px;
+    font-weight: 700;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    padding: 16px 24px 24px;
+    border-top: 1px solid var(--faint);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-priority {
+    font-size: 10px;
+    color: var(--dim);
+    font-weight: 700;
+  }
+  .export-btn {
+    background: var(--dark);
+    border: 1px solid var(--faint);
+    border-radius: 20px;
+    padding: 7px 16px;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--volt);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-family: var(--font);
+  }
+  .export-btn:hover { background: rgba(255,255,255,0.06); }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--dim);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <span class="header-title">AGENT READY</span>
+    <span class="header-credit">MC DEAN</span>
+  </div>
+
+  <!-- Ring Section -->
+  <div class="ring-section">
+    <!-- Scanning state -->
+    <div id="scanning-state" class="scanning hidden">
+      <div class="spinner"></div>
+      <span class="scanning-text">Scanning...</span>
+    </div>
+
+    <!-- Score ring -->
+    <div id="ring-display" class="ring-wrap hidden">
+      <svg width="164" height="164">
+        <circle class="ring-track" cx="82" cy="82" r="78" />
+        <circle id="ring-arc" class="ring-progress" cx="82" cy="82" r="78"
+          stroke-dasharray="490.09" stroke-dashoffset="490.09" />
+      </svg>
+      <div class="ring-label">
+        <span id="ring-score-value" class="ring-score">—</span>
+        <span class="ring-subtitle">Agent Ready</span>
+      </div>
+    </div>
+
+    <!-- Empty state (before first scan) -->
+    <div id="empty-state" class="empty-state">
+      Select a frame and<br>hit scan to begin
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div id="stats-bar" class="stats hidden">
+    <div class="stat">
+      <span id="stat-checks" class="stat-value" style="color: #fff;">—</span>
+      <span class="stat-label">Checks</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span id="stat-issues" class="stat-value" style="color: var(--red);">—</span>
+      <span class="stat-label">Issues</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span id="stat-passed" class="stat-value" style="color: var(--volt);">—</span>
+      <span class="stat-label">Passed</span>
+    </div>
+  </div>
+
+  <!-- Error message -->
+  <div id="error-msg" class="error-msg hidden"></div>
+
+  <!-- Scan Button -->
+  <div class="scan-wrap">
+    <button id="scan-btn" class="scan-btn" onclick="startScan()">Scan Frame</button>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="results hidden"></div>
+
+  <!-- Footer -->
+  <div id="footer" class="footer hidden">
+    <span id="footer-priority" class="footer-priority"></span>
+    <button class="export-btn" onclick="exportResults()">Export</button>
+  </div>
+
+<script>
+  // ============================================================
+  // STATE
+  // ============================================================
+  let currentResults = null;
+
+  // ============================================================
+  // COLOUR HELPERS
+  // ============================================================
+  function getScoreColor(s) {
+    if (s >= 75) return '#CEFF00';
+    if (s >= 55) return '#FFE566';
+    if (s >= 35) return '#FF8C42';
+    return '#FF3B3B';
+  }
+
+  // ============================================================
+  // COMMUNICATION WITH SANDBOX
+  // ============================================================
+
+  // Tell the sandbox to start scanning
+  function startScan() {
+    const btn = document.getElementById('scan-btn');
+    btn.classList.add('scanning');
+    btn.textContent = 'SCANNING...';
+    btn.disabled = true;
+
+    document.getElementById('empty-state').classList.add('hidden');
+    document.getElementById('ring-display').classList.add('hidden');
+    document.getElementById('stats-bar').classList.add('hidden');
+    document.getElementById('results').classList.add('hidden');
+    document.getElementById('footer').classList.add('hidden');
+    document.getElementById('error-msg').classList.add('hidden');
+    document.getElementById('scanning-state').classList.remove('hidden');
+
+    // Send message to the sandbox (code.js)
+    parent.postMessage({ pluginMessage: { type: 'scan' } }, '*');
+  }
+
+  // Listen for messages back from the sandbox
+  window.onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    const btn = document.getElementById('scan-btn');
+    btn.classList.remove('scanning');
+    btn.textContent = 'SCAN FRAME';
+    btn.disabled = false;
+    document.getElementById('scanning-state').classList.add('hidden');
+
+    if (msg.type === 'error') {
+      document.getElementById('error-msg').textContent = msg.message;
+      document.getElementById('error-msg').classList.remove('hidden');
+      document.getElementById('empty-state').classList.remove('hidden');
+      return;
+    }
+
+    if (msg.type === 'results') {
+      currentResults = msg.data;
+      renderResults(msg.data);
+    }
+  };
+
+  // ============================================================
+  // RENDER RESULTS
+  // ============================================================
+  function renderResults(checks) {
+    // Calculate weighted overall score
+    const totalWeight = checks.reduce((s, c) => s + (c.weight || 1), 0);
+    const weightedSum = checks.reduce((s, c) => s + c.score * (c.weight || 1), 0);
+    const overall = Math.round(weightedSum / totalWeight);
+    const totalIssues = checks.reduce((s, c) => s + c.issues, 0);
+    const passed = checks.filter(c => c.score >= 75).length;
+    const color = getScoreColor(overall);
+
+    // --- Ring ---
+    const ringDisplay = document.getElementById('ring-display');
+    ringDisplay.classList.remove('hidden');
+    document.getElementById('ring-score-value').textContent = overall;
+
+    const arc = document.getElementById('ring-arc');
+    const circ = 490.09; // 2 * PI * 78
+    const offset = circ - (overall / 100) * circ;
+    arc.style.stroke = color;
+    // Trigger animation: reset first, then set target
+    arc.style.transition = 'none';
+    arc.setAttribute('stroke-dashoffset', circ);
+    requestAnimationFrame(() => {
+      arc.style.transition = 'stroke-dashoffset 1s cubic-bezier(0.16, 1, 0.3, 1)';
+      arc.setAttribute('stroke-dashoffset', offset);
+    });
+
+    // --- Stats ---
+    document.getElementById('stats-bar').classList.remove('hidden');
+    document.getElementById('stat-checks').textContent = checks.length;
+    document.getElementById('stat-issues').textContent = totalIssues;
+    document.getElementById('stat-passed').textContent = passed;
+
+    // --- Results list ---
+    const resultsEl = document.getElementById('results');
+    resultsEl.innerHTML = '';
+    resultsEl.classList.remove('hidden');
+
+    const tiers = [
+      { key: 'critical', label: 'CRITICAL IMPACT', color: '#FF3B3B' },
+      { key: 'high', label: 'HIGH IMPACT', color: '#FF8C42' },
+      { key: 'moderate', label: 'MODERATE IMPACT', color: 'rgba(255,255,255,0.15)' },
+      { key: 'output', label: 'OUTPUT QUALITY', color: 'rgba(206,255,0,0.35)' },
+    ];
+
+    for (const tier of tiers) {
+      const tierChecks = checks.filter(c => c.impact === tier.key);
+      if (tierChecks.length === 0) continue;
+
+      const tierEl = document.createElement('div');
+      tierEl.className = 'tier';
+      tierEl.innerHTML = `
+        <div class="tier-header">
+          <div class="tier-line" style="background: ${tier.color}"></div>
+          <span class="tier-label">${tier.label}</span>
+        </div>
+      `;
+
+      for (const check of tierChecks) {
+        const c = getScoreColor(check.score);
+        const r = 15.5; // (34 - 3) / 2
+        const circ = 2 * Math.PI * r;
+        const off = circ - (check.score / 100) * circ;
+        const checkId = `check-${check.id}`;
+
+        const row = document.createElement('div');
+        row.className = 'check-row';
+        row.innerHTML = `
+          <button class="check-btn" onclick="toggleCheck('${checkId}')">
+            <div class="mini-arc">
+              <svg width="34" height="34">
+                <circle class="mini-arc-track" cx="17" cy="17" r="${r}" />
+                <circle class="mini-arc-progress" cx="17" cy="17" r="${r}"
+                  stroke="${c}" stroke-dasharray="${circ}" stroke-dashoffset="${off}" />
+              </svg>
+              <span class="mini-arc-value" style="color: ${c}">${check.score}</span>
+            </div>
+            <div class="check-info">
+              <div class="check-label">${check.label}</div>
+              <div class="check-issues">${check.issues} ${check.issues === 1 ? 'issue' : 'issues'} found</div>
+            </div>
+            <span id="chevron-${checkId}" class="check-chevron">›</span>
+          </button>
+          <div id="${checkId}" class="check-details">
+            <div class="check-desc">${check.description}</div>
+            ${check.details.map(d => `
+              <div class="detail-card" style="border-left-color: ${c}">
+                <div class="detail-layer">${escapeHtml(d.layer)}</div>
+                <div class="detail-path">${escapeHtml(d.path)}</div>
+                <div class="detail-fix">→ ${escapeHtml(d.fix)}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        tierEl.appendChild(row);
+      }
+
+      resultsEl.appendChild(tierEl);
+    }
+
+    // --- Footer ---
+    const sorted = [...checks].sort((a, b) => a.score - b.score);
+    const worst3 = sorted.slice(0, 3);
+    const priorityHtml = 'Start with ' + worst3.map(c =>
+      `<span style="color: ${getScoreColor(c.score)}">${c.label}</span>`
+    ).join(' → ');
+
+    document.getElementById('footer').classList.remove('hidden');
+    document.getElementById('footer-priority').innerHTML = priorityHtml;
+  }
+
+  // ============================================================
+  // TOGGLE CHECK DETAILS
+  // ============================================================
+  function toggleCheck(id) {
+    const el = document.getElementById(id);
+    const chevron = document.getElementById('chevron-' + id);
+    const isOpen = el.classList.contains('open');
+
+    // Close all others
+    document.querySelectorAll('.check-details.open').forEach(d => {
+      d.classList.remove('open');
+    });
+    document.querySelectorAll('.check-chevron.open').forEach(c => {
+      c.classList.remove('open');
+    });
+
+    if (!isOpen) {
+      el.classList.add('open');
+      chevron.classList.add('open');
+    }
+  }
+
+  // ============================================================
+  // EXPORT (copies results as markdown to clipboard)
+  // ============================================================
+  function exportResults() {
+    if (!currentResults) return;
+
+    const totalWeight = currentResults.reduce((s, c) => s + (c.weight || 1), 0);
+    const weightedSum = currentResults.reduce((s, c) => s + c.score * (c.weight || 1), 0);
+    const overall = Math.round(weightedSum / totalWeight);
+
+    let md = `# Agent Ready Report\n`;
+    md += `**Overall Score: ${overall}/100**\n\n`;
+
+    for (const check of currentResults) {
+      md += `## ${check.label} — ${check.score}/100 (${check.issues} issues)\n`;
+      md += `${check.description}\n\n`;
+      for (const d of check.details) {
+        md += `- **${d.layer}** (${d.path})\n  → ${d.fix}\n`;
+      }
+      md += `\n`;
+    }
+
+    md += `---\n*Scanned by Agent Ready — MC Dean*\n`;
+
+    // Copy to clipboard — try modern Clipboard API first,
+    // fall back to legacy execCommand for older plugin iframes
+    const btn = document.querySelector('.export-btn');
+
+    async function copyToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+    }
+
+    copyToClipboard(md).then(() => {
+      btn.textContent = 'COPIED';
+      setTimeout(() => { btn.textContent = 'EXPORT'; }, 1500);
+    });
+  }
+
+  // ============================================================
+  // UTIL
+  // ============================================================
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>

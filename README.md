@@ -1,0 +1,167 @@
+# Agent Ready
+
+**Is your design file ready for AI agents?**
+
+Agent Ready scans your Figma file and scores how well an AI agent
+can read, understand, and act on it. 13 checks across 4 impact tiers,
+with specific fix suggestions for every issue found.
+
+This repo contains two tools that work together:
+
+- **A Figma plugin** that talks to humans — run it, see a score, fix issues.
+- **An agent skill** that talks to AI agents (Claude Code, Gemini CLI, Cursor, Codex, Windsurf) — it assesses file quality and compensates for gaps before generating code.
+
+The plugin raises the floor of file quality from the human side.
+The skill raises the ceiling of what agents can produce from the agent side.
+Together, they close the gap from both directions.
+
+By MC Dean · [Percolates on Substack](https://marieclairedean.substack.com)
+
+---
+
+## What's in the box
+
+```
+agent-ready-plugin/
+├── manifest.json   — tells Figma this is a plugin
+├── code.js         — the scan engine (runs inside Figma's sandbox)
+├── ui.html         — the panel UI you interact with
+├── SKILL.md        — the MCP skill for AI agents
+└── README.md       — you're here
+```
+
+---
+
+## The Plugin
+
+### Install (3 minutes)
+
+You need the **Figma desktop app** (not the browser version)
+to run local plugins.
+
+1. Download or clone this folder to your computer
+2. Open any Figma file
+3. Go to: **Plugins → Development → Import plugin from manifest…**
+4. Navigate to the `agent-ready-plugin` folder and select `manifest.json`
+5. Click **Open**
+
+That's it. The plugin is installed locally.
+
+### Run it
+
+1. Select a frame on your canvas
+2. Go to: **Plugins → Development → Agent Ready**
+3. The panel opens. Click **Scan Frame**
+4. See your score and fix suggestions
+
+### What it checks (ordered by agent impact)
+
+**Critical Impact** — these fundamentally change agent output:
+
+- **Descriptions** — Do components explain what they're for?
+- **Layer Naming** — Are layers named, or still "Frame 247"?
+- **Component Props** — Are there boolean/text/swap properties?
+- **Code Connect** — Are Figma props mapped to code props?
+
+**High Impact** — significantly improves comprehension:
+
+- **Auto-layout** — Does the structure encode intent?
+- **Token Usage** — Are colours, strokes, and effects linked to styles?
+- **Real Content** — Or is it full of lorem ipsum and placeholder data?
+- **State Coverage** — Are hover/disabled/error/loading defined?
+
+**Moderate Impact** — reduces errors and waste:
+
+- **Components** — How much uses components vs loose raw shapes?
+- **Consistency** — Are naming conventions uniform?
+- **Hierarchy** — Is the nesting logical and shallow?
+- **Page Structure** — Is the file organised into pages?
+
+**Output Quality** — affects what the agent builds, not what it reads:
+
+- **Accessible Output** — Will the agent's code be accessible?
+
+### How the score works
+
+Each check produces a 0–100 score. The overall score is a
+**weighted average** — critical checks count 2.5× more than
+moderate ones. A file with perfect hierarchy but empty descriptions
+still gets a bad score, because that matches how an agent actually
+experiences the file.
+
+### Tips
+
+- **Start with Descriptions.** One sentence per component is the
+  single highest-impact thing you can do.
+- **Fix naming in batches.** Select a frame, rename its children
+  with meaningful names. Even 15 minutes makes a big difference.
+- **Export your report.** The Export button copies a markdown report
+  to your clipboard — paste it into a doc or Slack to share with
+  your team.
+
+---
+
+## The Skill (SKILL.md)
+
+The skill teaches AI agents to assess a Figma file's readiness
+*before* generating code, and to compensate for gaps it finds.
+It runs the same 13 checks conceptually, but instead of showing
+a score, it adjusts how the agent reads and interprets the file.
+
+When generating code, the skill works silently — inferring names,
+resolving tokens, flagging where it had to guess. When asked
+directly ("How agent-ready is this file?"), it produces a full
+readiness report with scores and recommendations.
+
+### Install
+
+Create an `agent-ready` folder in your agent's skills directory
+and place `SKILL.md` inside it:
+
+- **Claude Code:** `.claude/skills/agent-ready/SKILL.md`
+- **Gemini CLI:** `.gemini/skills/agent-ready/SKILL.md` (project-scoped) or `~/.gemini/skills/agent-ready/SKILL.md` (global — works across all projects)
+- **Cursor:** `.cursor/skills/SKILL.md` or project root
+- **Codex:** `.agents/skills/agent-ready/SKILL.md`
+- **Other agents:** wherever your agent reads skill files
+
+The skill triggers automatically based on its description frontmatter.
+Most agents match skills by context, not by command — so natural
+language works:
+
+- "How agent-ready is this Figma file?"
+- "Assess this design before generating code"
+- "Implement this design as a React component" *(triggers silently)*
+
+### Requires
+
+A Figma MCP server providing `get_design_context`, `use_figma`,
+and `search_design_system`. If these aren't available, the skill
+will tell the user what to connect.
+
+---
+
+## Publishing to Figma Community
+
+When the plugin is tested and ready to share:
+
+1. Go to your [Figma plugin dashboard](https://www.figma.com/developers)
+2. Click **New plugin** and upload the manifest
+3. Add a description, icon, and cover image
+4. Submit for review (usually takes a few days)
+
+Note: the `id` field in `manifest.json` will need to be updated
+to the numeric ID Figma assigns when you register the plugin.
+
+---
+
+## Contributing
+
+Agent Ready is open source under Owl-Listener. Fork it, break it,
+make it better. If you add a check, keep the impact-tier ordering
+and weight system — it's what makes the score meaningful.
+
+---
+
+## License
+
+MIT
