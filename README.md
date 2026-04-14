@@ -101,42 +101,66 @@ experiences the file.
 
 ---
 
-## The Skill (SKILL.md)
+## For AI agents
 
-The skill teaches AI agents to assess a Figma file's readiness
-*before* generating code, and to compensate for gaps it finds.
-It runs the same 13 checks conceptually, but instead of showing
-a score, it adjusts how the agent reads and interprets the file.
+Agent Ready ships with instruction files that teach AI coding agents
+to assess a Figma file's readiness *before* generating code, and to
+compensate for gaps they find. The agent runs the same 13 checks
+conceptually, but instead of showing a visual score, it adjusts how
+it reads and interprets the file.
 
-When generating code, the skill works silently — inferring names,
+When generating code, the agent works silently — inferring names,
 resolving tokens, flagging where it had to guess. When asked
 directly ("How agent-ready is this file?"), it produces a full
 readiness report with scores and recommendations.
 
-### Install
+Each supported agent has its own instruction file, because every
+agent has a different convention for where persistent instructions
+live. Both files contain the same core content (the 13 checks, the
+compensation patterns, the examples) — they differ only in framing
+and install location.
 
-Create an `agent-ready` folder in your agent's skills directory
-and place `SKILL.md` inside it:
+### Claude Code → `SKILL.md`
 
-- **Claude Code:** `.claude/skills/agent-ready/SKILL.md`
-- **Gemini CLI:** `.gemini/skills/agent-ready/SKILL.md` (project-scoped) or `~/.gemini/skills/agent-ready/SKILL.md` (global — works across all projects)
-- **Cursor:** `.cursor/skills/SKILL.md` or project root
-- **Codex:** `.agents/skills/agent-ready/SKILL.md`
-- **Other agents:** wherever your agent reads skill files
-
-The skill triggers automatically based on its description frontmatter.
-Most agents match skills by context, not by command — so natural
-language works:
+Copy `SKILL.md` into `.claude/skills/agent-ready/` in your project,
+or into `~/.claude/skills/agent-ready/` to make it available globally.
+Claude Code auto-triggers the skill based on its description
+frontmatter — natural language works:
 
 - "How agent-ready is this Figma file?"
 - "Assess this design before generating code"
 - "Implement this design as a React component" *(triggers silently)*
 
+### Gemini CLI → `GEMINI.md`
+
+Copy `GEMINI.md` into the root of your project, or into
+`~/.gemini/GEMINI.md` to apply globally across all projects. Gemini
+CLI auto-loads `GEMINI.md` files as persistent instructions when you
+run `gemini` in that folder — no command needed.
+
+Unlike Claude Code skills, Gemini CLI doesn't trigger instructions
+based on a description field, so `GEMINI.md` is always loaded when
+you're in the project. The instructions are written to recognise
+when they apply (Figma work, code generation from designs) and
+otherwise stay out of your way.
+
+### Cursor, Codex, Windsurf — coming soon
+
+Adapter files for other coding agents are planned. If you use one
+of these agents and want support sooner, please [open an issue](https://github.com/Owl-Listener/agent-ready/issues)
+— it'll help me prioritise which to build next.
+
 ### Requires
 
-A Figma MCP server providing `get_design_context`, `use_figma`,
-and `search_design_system`. If these aren't available, the skill
-will tell the user what to connect.
+Both files require a Figma MCP server providing `get_design_context`,
+`use_figma`, and `search_design_system`. If these aren't available,
+the agent will tell the user what to connect.
+
+### Keeping files in sync
+
+`SKILL.md` is the canonical source. If you fork this repo and edit
+the checks, please update both `SKILL.md` and `GEMINI.md` together
+so the two entry points stay consistent.
 
 ---
 
