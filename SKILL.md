@@ -1,11 +1,12 @@
 ---
 name: agent-ready
+version: 0.2.0
 description: "Assess a Figma file's agent readiness before generating code or modifying designs. Use when reading design context from Figma via MCP, generating code from Figma components, creating or updating components in a Figma file, or when code output quality seems poor and the cause may be file quality. Triggers on: Figma file, design context, generate from Figma, implement this design, messy file, bad output, component code."
 ---
 
 # Agent Ready
 
-*By MC Dean · Requires Figma MCP server tools (get_design_context, use_figma, search_design_system)*
+*By MC Dean · v0.2.0 · Requires Figma MCP server tools (get_design_context, use_figma, search_design_system)*
 
 Assess a Figma file's readiness for agent interaction and compensate
 for gaps before generating code or modifying designs. This skill
@@ -58,6 +59,26 @@ Figma MCP server to read your file directly. You can set it up at
 https://github.com/nichochar/open-figma-mcp — or paste your Figma
 file URL and I'll explain what to check manually."
 
+## v0.2.0: Executable verification for 5 of the 13 checks
+
+As of v0.2.0, this skill ships with a small shared JavaScript module
+that implements 5 of the 13 checks as pure functions — descriptions,
+description quality, layer naming, token binding, and Code Connect.
+They live at `shared/checks.js` and `shared/report.js`, run in Node
+with no Figma dependencies, and produce the same scores the Figma
+plugin does for the same file.
+
+When you have the raw Figma node tree in JSON (from an MCP response
+or a dev-mode export), you can run these checks for real instead of
+eyeballing them. The module also generates an `@agent-ready-report`
+block — a structured comment you paste at the top of any code you
+produce from the file. It records what you saw, what you inferred,
+and how confident you are, so a human reviewer can audit the work.
+
+For the other 8 checks, continue using the prose guidance below.
+The intent is to port them to `shared/checks.js` as the skill
+matures.
+
 ## Instructions
 
 ### Step 1: Read the file context
@@ -71,19 +92,19 @@ Evaluate the file against these 13 checks, in order of impact on your output qua
 
 #### Critical impact (address these first — they change your output most)
 
-1. **Description coverage.** Check every component and component set for a `description` field. If empty, you must infer purpose from the component name, its variants, and its visual context. State your inference explicitly in code comments so a human can verify.
+1. **Description coverage and quality.** Check every component and component set for a `description` field. A missing description is the biggest single reason your code will go sideways — you end up inferring purpose from the component name alone, which is too thin a signal. If the description is empty, infer purpose from the component name, its variants, and its visual context, and state your inference explicitly in code comments so a human can verify. A description that is present but shallow (e.g. "a rounded button with an icon") is almost as bad as one that is missing: it tells you what the component looks like but not what it is for or when to use it. A good description explains purpose ("what this is for"), usage ("when to pick this one instead of X"), and constraints ("do not nest inside Y"). If the description only covers appearance, treat it as a partial gap and note the inference in your code comments. Figma's 2025 design-systems-and-AI ebook puts this plainly: *"Explain the 'why.' Describe each component's purpose and when to use it, not just how it looks."*
 
 2. **Layer naming.** Scan for default Figma names: Frame, Group, Rectangle, Ellipse, Line, Vector, Polygon, Star, Boolean, Slice, Image, Text followed by a number. For any you find, infer a meaningful name from context before using it in code. Prefer semantic names: `hero-heading-group` not `Frame 247`.
 
 3. **Component properties.** Check component sets for `componentPropertyDefinitions`. If a component has variants but no boolean, text, or instance swap properties, treat the variant names as your property source. Parse the variant string (e.g. "State=Hover, Size=MD") to extract structured props for your code.
 
-4. **Code Connect.** Check whether components have Code Connect mappings that bridge Figma props to code props. If Code Connect is present, always use its mappings — they are the authoritative translation between design and code. If absent, you must infer the mapping yourself: "Type=Primary" likely maps to `variant="primary"`, "State=Hover" is likely a CSS pseudo-class not a prop. State your inferences in comments so a human can verify.
+4. **Code Connect and the bridge to production code.** Check whether components have Code Connect mappings, dev resources, or READY_FOR_DEV status — any of these three is a real bridge between the design file and the production codebase. If Code Connect is present, always use its mappings; they are the authoritative translation between design and code. If absent, the file is claiming something that is not true: "this component exists in design" without a working connection to "this component exists in code." You must infer the mapping yourself and flag the gap. "Type=Primary" likely maps to `variant="primary"`, "State=Hover" is likely a CSS pseudo-class not a prop. State every inference in comments so a human can verify, and name the specific component that is missing a mapping. This check matters more than it looks: Figma's own guidance warns that *"you might have some components in Figma Design that you've never hooked up to code, even though there's an actual valid component in your code repository for it somewhere"* — a stale or missing bridge is how agent-generated code ends up referring to components that don't exist, or missing production components that do.
 
 #### High impact (significantly improves your comprehension)
 
 5. **Auto-layout.** Check frames for `layoutMode`. If a frame has multiple children but no auto-layout, infer layout intent from child positions: are they stacked vertically, arranged horizontally, or in a grid? Use this inference for your flexbox/grid decisions rather than absolute positioning.
 
-6. **Token usage.** Check whether fills, strokes, and text styles reference Figma styles or variables. If they do, use the style/variable name in your code (e.g. `var(--brand-primary)`). If they use raw hex values, check `search_design_system` for a matching style before falling back to the raw value.
+6. **Token binding.** This check is about more than whether tokens exist in the file — it is about whether they are actually *bound* to the nodes you are reading. A variable that is defined in the file but never attached to a fill, stroke, or text style is invisible to you. You will see the raw hex or pixel value and nothing else. For every fill, stroke, effect, and text node, check whether it carries a `fillStyleId`, `strokeStyleId`, `effectStyleId`, or `textStyleId` pointing to a style or variable. If it does, use the style name in your code (e.g. `var(--brand-primary)`, `var(--surface-raised)`). If the node is unbound, run `search_design_system` for a matching token before falling back to the raw value, and note the inference in your output. Figma's 2025 ebook: *"Store tokens in machine-readable formats (like JSON or YAML) with consistent naming so colors, spacing, and typography map predictably to production variables."* Binding is what makes them machine-readable in practice, not just in theory.
 
 7. **Real content.** Check text nodes for lorem ipsum, placeholder text ("Title", "Label", "Text", "$0.00", "XXX"). If found, do not use placeholder content in function names, variable names, or comments. Instead, infer the element's purpose from its position and parent component.
 
@@ -103,34 +124,59 @@ Evaluate the file against these 13 checks, in order of impact on your output qua
 
 13. **Accessibility.** Check whether frame descriptions or names reference landmarks, roles, reading order, or focus behaviour. If they do, use those annotations in your code. If they don't, apply sensible defaults: use semantic HTML elements, add landmark roles to major sections, and ensure interactive elements are keyboard-accessible.
 
-### Step 3: Report your assessment (when asked)
+### Step 3: Report your assessment
 
-If the user asks for a readiness assessment, report:
+Always emit an `@agent-ready-report` block, whether the user explicitly
+asked for an assessment or just asked you to generate code. The block
+is the evidence trail — it tells a reviewer what you saw, what you
+had to guess, and how confident you are. Place it as a comment at
+the very top of any file you produce from the Figma source.
+
+If you have the node tree as JSON and can run `shared/report.js`,
+use the real output from `generateReport(results, options)`. If you
+are assessing prose-only, write the same block by hand in the same
+shape:
 
 ```
-Agent Ready Score: [estimated 0-100]
-
-Critical gaps:
-- [list any empty descriptions, unnamed layers, missing properties]
-
-Compensations applied:
-- [list any inferences you made to fill gaps]
-
-Recommendations:
-- [top 3 things the designer could fix for immediate improvement]
+/*
+ * @agent-ready-report
+ * skill-version: 0.2.0
+ * file: [Figma file name]
+ * file-score: [0-100]
+ * checks-run: [number of checks you actually evaluated]
+ *
+ * critical-gaps: [count, or "none"]
+ *   - [check-id] [node name]: [one-line message]
+ *   - ...
+ *
+ * inferences: [count, or "none"]
+ *   - [what you had to guess and why]
+ *   - ...
+ *
+ * confidence: [high | medium | low]
+ *
+ * This block was generated by the Agent Ready skill.
+ * It documents what the agent saw in the Figma file,
+ * what it had to guess, and how confident it is. A human
+ * reviewer should read this before trusting the code below.
+ */
 ```
+
+If the user asked specifically for an assessment (rather than code),
+follow the block with a short prose recap: the score, the top
+critical gaps with fix suggestions, and the three highest-impact
+things the designer could do in Figma to raise the score.
 
 ### Step 4: Compensate silently (when generating code)
 
 When generating code from a Figma file, apply compensations from Step 2
 without narrating them unless the user asks. Your code should reflect
-the designer's intent, not the file's gaps. Add a brief comment at the
-top of generated code if you made significant inferences:
-
-```
-// Note: Component descriptions were empty in the Figma source.
-// Function and variable names inferred from component structure and context.
-```
+the designer's intent, not the file's gaps. Record every non-trivial
+inference in the `inferences` field of the `@agent-ready-report` block
+from Step 3 — that's where a reviewer will look to audit your guesses.
+Do not scatter inference notes across the file body; keep them in one
+place at the top so they're easy to verify and easy to ignore once
+the file quality improves.
 
 ## Examples
 

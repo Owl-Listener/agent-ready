@@ -1,0 +1,78 @@
+{
+  "id": "0:1",
+  "type": "DOCUMENT",
+  "name": "Example file",
+  "children": [
+    {
+      "id": "1:1",
+      "type": "PAGE",
+      "name": "Design System",
+      "children": [
+        {
+          "id": "2:1",
+          "type": "COMPONENT_SET",
+          "name": "Button",
+          "description": "",
+          "hasCodeConnect": false,
+          "children": [
+            {
+              "id": "2:1:a",
+              "type": "COMPONENT",
+              "name": "Type=Primary, State=Default",
+              "parentType": "COMPONENT_SET",
+              "description": ""
+            }
+          ]
+        },
+        {
+          "id": "2:2",
+          "type": "COMPONENT",
+          "name": "Card",
+          "description": "Content container with a title, body text, and an optional action row. Use when you need to group related information on a dashboard. Do not nest cards inside other cards — use a list instead.",
+          "hasCodeConnect": true,
+          "children": [
+            {
+              "id": "3:1",
+              "type": "FRAME",
+              "name": "Card Container",
+              "layoutMode": "VERTICAL",
+              "fills": [{ "type": "SOLID", "visible": true }],
+              "fillStyleId": "S:surface/raised"
+            },
+            {
+              "id": "3:2",
+              "type": "TEXT",
+              "name": "Card Title",
+              "textStyleId": "S:heading/h3",
+              "fills": [{ "type": "SOLID", "visible": true }],
+              "fillStyleId": "S:text/primary"
+            }
+          ]
+        },
+        {
+          "id": "2:3",
+          "type": "COMPONENT",
+          "name": "Avatar",
+          "description": "A rounded circular image.",
+          "hasCodeConnect": false,
+          "children": [
+            {
+              "id": "4:1",
+              "type": "ELLIPSE",
+              "name": "Ellipse 12",
+              "fills": [{ "type": "SOLID", "visible": true }],
+              "fillStyleId": ""
+            }
+          ]
+        },
+        {
+          "id": "2:4",
+          "type": "FRAME",
+          "name": "Frame 247",
+          "fills": [{ "type": "SOLID", "visible": true }],
+          "fillStyleId": ""
+        }
+      ]
+    }
+  ]
+}

@@ -1,126 +1,132 @@
 # Agent Ready
 
-**Is your design file ready for AI agents?**
+**Your design file is probably not ready for AI agents. Here's how to tell, and what to do about it.**
 
-Agent Ready scans your Figma file and scores how well an AI agent
-can read, understand, and act on it. 13 checks across 4 impact tiers,
-with specific fix suggestions for every issue found.
+When an AI coding agent reads a Figma file through MCP, it sees a very
+different thing than you do. It sees unnamed layers called "Frame 247",
+empty component descriptions, raw hex values where tokens should be,
+and missing states. Each gap forces it to guess. The guesses compound.
+The code comes out messy, generic, or quietly wrong — and most of the
+time, you blame the agent.
 
-This repo contains two tools that work together:
-
-- **A Figma plugin** that talks to humans — run it, see a score, fix issues.
-- **An agent skill** that talks to AI agents (Claude Code, Gemini CLI, Cursor, Codex, Windsurf) — it assesses file quality and compensates for gaps before generating code.
-
-The plugin raises the floor of file quality from the human side.
-The skill raises the ceiling of what agents can produce from the agent side.
-Together, they close the gap from both directions.
+Agent Ready is built around one claim: **design files need to be
+agent-readable now, or agent collaboration produces bad outputs.**
+This repo contains two things that address that claim from two
+different directions.
 
 By MC Dean · [Percolates on Substack](https://marieclairedean.substack.com)
 
 ---
 
-## What's in the box
+## What this repo contains
 
 ```
 agent-ready-plugin/
-├── manifest.json   — tells Figma this is a plugin
-├── code.js         — the scan engine (runs inside Figma's sandbox)
-├── ui.html         — the panel UI you interact with
-├── SKILL.md        — the MCP skill for AI agents
+├── SKILL.md        — the agent skill (the real product)
+├── GEMINI.md       — the same skill for Gemini CLI
+├── shared/         — executable checks the skill can run against raw Figma JSON
+├── manifest.json   — the Figma plugin (the educational on-ramp)
+├── code.js         — the plugin scan engine
+├── ui.html         — the plugin UI
 └── README.md       — you're here
 ```
 
+There are two tools here, but they are not equal.
+
+**The skill is the real product.** It's what actually raises the
+ceiling of what an agent can produce from a messy Figma file. It runs
+inside your coding agent (Claude Code, Gemini CLI, and more soon),
+silently assesses every file the agent reads, and compensates for
+gaps before generating code. It emits a structured evidence block at
+the top of every file it produces so a human reviewer can audit what
+the agent had to guess.
+
+**The plugin is the educational on-ramp.** It's the thing that makes
+a designer realise, visually, that their file isn't ready for agent
+collaboration. You run it inside Figma, see a score, see the specific
+gaps, and get a prioritised fix list. That's its job. It's not where
+the long-term value lives — it's the moment you decide to care.
+
+If you only install one, install the skill.
+
 ---
 
-## The Plugin
+## The Skill
 
-### Install (3 minutes)
+Agent Ready ships as an instruction file for your coding agent. It
+runs the same 13 agent-readiness checks conceptually — but instead of
+showing a visual score, it changes how the agent reads and interprets
+the file, and writes its assumptions down in a form you can audit.
 
-You need the **Figma desktop app** (not the browser version)
-to run local plugins.
+### What it does, invisibly
 
-1. Download or clone this folder to your computer
-2. Open any Figma file
-3. Go to: **Plugins → Development → Import plugin from manifest…**
-4. Navigate to the `agent-ready-plugin` folder and select `manifest.json`
-5. Click **Open**
+When you ask your agent to implement a Figma design, the skill fires
+automatically. It:
 
-That's it. The plugin is installed locally.
+- Reads the file context through your Figma MCP server.
+- Runs 13 checks across four impact tiers (see below).
+- Compensates for gaps silently — infers names from context, resolves
+  tokens from the design system, adds missing states, parses variant
+  strings for props.
+- Emits an `@agent-ready-report` comment block at the top of any code
+  it produces, recording what it saw, what it had to guess, and how
+  confident it is.
 
-### Run it
-
-1. Select a frame on your canvas
-2. Go to: **Plugins → Development → Agent Ready**
-3. The panel opens. Click **Scan Frame**
-4. See your score and fix suggestions
+When you ask it directly — *"How agent-ready is this file?"* — it
+produces a full readiness report with scores, critical gaps, and
+recommendations.
 
 ### What it checks (ordered by agent impact)
 
-**Critical Impact** — these fundamentally change agent output:
+**Critical impact** — these fundamentally change agent output:
 
-- **Descriptions** — Do components explain what they're for?
-- **Layer Naming** — Are layers named, or still "Frame 247"?
-- **Component Props** — Are there boolean/text/swap properties?
-- **Code Connect** — Are Figma props mapped to code props?
+- **Description coverage and quality** — Do components explain their
+  purpose, not just their appearance?
+- **Layer naming** — Are layers named, or still "Frame 247"?
+- **Component properties** — Boolean, text, and instance-swap props?
+- **Code Connect bridge** — Are Figma props mapped to real code props,
+  or is the file claiming a bridge to production that doesn't exist?
 
-**High Impact** — significantly improves comprehension:
+**High impact** — significantly improves agent comprehension:
 
-- **Auto-layout** — Does the structure encode intent?
-- **Token Usage** — Are colours, strokes, and effects linked to styles?
-- **Real Content** — Or is it full of lorem ipsum and placeholder data?
-- **State Coverage** — Are hover/disabled/error/loading defined?
+- **Auto-layout** — Does the structure encode layout intent?
+- **Token binding** — Not whether tokens exist, but whether they're
+  actually *attached* to fills, strokes, and text. An unbound token
+  is invisible to the agent.
+- **Real content** — Or is it full of lorem ipsum and "Label"?
+- **State completeness** — Are hover, disabled, error, and loading
+  states defined?
 
-**Moderate Impact** — reduces errors and waste:
+**Moderate impact** — reduces errors and waste:
 
-- **Components** — How much uses components vs loose raw shapes?
-- **Consistency** — Are naming conventions uniform?
-- **Hierarchy** — Is the nesting logical and shallow?
-- **Page Structure** — Is the file organised into pages?
+- **Component coverage** — Instances vs raw shapes.
+- **Naming consistency** — sm/small/S or one of them?
+- **Hierarchy depth** — Flat enough to reflect DOM intent?
+- **Page organisation** — One massive page or logical sections?
 
-**Output Quality** — affects what the agent builds, not what it reads:
+**Output quality** — affects what the agent builds:
 
-- **Accessible Output** — Will the agent's code be accessible?
+- **Accessibility annotations** — Landmarks, roles, focus behaviour.
 
-### How the score works
+### v0.2.0: executable verification
 
-Each check produces a 0–100 score. The overall score is a
-**weighted average** — critical checks count 2.5× more than
-moderate ones. A file with perfect hierarchy but empty descriptions
-still gets a bad score, because that matches how an agent actually
-experiences the file.
+As of v0.2.0, the skill ships with a small shared JavaScript module
+(`shared/checks.js`, `shared/report.js`) that implements five of the
+13 checks as pure functions — descriptions, description quality,
+layer naming, token binding, and Code Connect. When the agent has
+the raw Figma node tree in JSON, it can run these checks for real
+instead of eyeballing them, and produce the same scores the plugin
+does for the same file. The other eight checks still use prose
+guidance; they'll be ported as the skill matures.
 
-### Tips
+The module also generates the `@agent-ready-report` block — the
+structured comment the agent pastes at the top of any code it
+produces. That block is the evidence trail. It tells a reviewer
+what the agent saw, what it had to guess, and how confident it is.
 
-- **Start with Descriptions.** One sentence per component is the
-  single highest-impact thing you can do.
-- **Fix naming in batches.** Select a frame, rename its children
-  with meaningful names. Even 15 minutes makes a big difference.
-- **Export your report.** The Export button copies a markdown report
-  to your clipboard — paste it into a doc or Slack to share with
-  your team.
+### Install
 
----
-
-## For AI agents
-
-Agent Ready ships with instruction files that teach AI coding agents
-to assess a Figma file's readiness *before* generating code, and to
-compensate for gaps they find. The agent runs the same 13 checks
-conceptually, but instead of showing a visual score, it adjusts how
-it reads and interprets the file.
-
-When generating code, the agent works silently — inferring names,
-resolving tokens, flagging where it had to guess. When asked
-directly ("How agent-ready is this file?"), it produces a full
-readiness report with scores and recommendations.
-
-Each supported agent has its own instruction file, because every
-agent has a different convention for where persistent instructions
-live. Both files contain the same core content (the 13 checks, the
-compensation patterns, the examples) — they differ only in framing
-and install location.
-
-### Claude Code → `SKILL.md`
+#### Claude Code → `SKILL.md`
 
 Copy `SKILL.md` into `.claude/skills/agent-ready/` in your project,
 or into `~/.claude/skills/agent-ready/` to make it available globally.
@@ -131,36 +137,87 @@ frontmatter — natural language works:
 - "Assess this design before generating code"
 - "Implement this design as a React component" *(triggers silently)*
 
-### Gemini CLI → `GEMINI.md`
+#### Gemini CLI → `GEMINI.md`
 
 Copy `GEMINI.md` into the root of your project, or into
 `~/.gemini/GEMINI.md` to apply globally across all projects. Gemini
 CLI auto-loads `GEMINI.md` files as persistent instructions when you
 run `gemini` in that folder — no command needed.
 
-Unlike Claude Code skills, Gemini CLI doesn't trigger instructions
-based on a description field, so `GEMINI.md` is always loaded when
-you're in the project. The instructions are written to recognise
-when they apply (Figma work, code generation from designs) and
-otherwise stay out of your way.
+#### Cursor, Codex, Windsurf — coming soon
 
-### Cursor, Codex, Windsurf — coming soon
-
-Adapter files for other coding agents are planned. If you use one
-of these agents and want support sooner, please [open an issue](https://github.com/Owl-Listener/agent-ready/issues)
-— it'll help me prioritise which to build next.
+Adapter files for other coding agents are planned. If you use one of
+these and want support sooner, please [open an issue](https://github.com/Owl-Listener/agent-ready/issues) —
+it'll help me prioritise.
 
 ### Requires
 
-Both files require a Figma MCP server providing `get_design_context`,
-`use_figma`, and `search_design_system`. If these aren't available,
-the agent will tell the user what to connect.
+A Figma MCP server providing `get_design_context`, `use_figma`, and
+`search_design_system`. If these aren't available, the skill will
+tell the user what to connect.
 
-### Keeping files in sync
+---
 
-`SKILL.md` is the canonical source. If you fork this repo and edit
-the checks, please update both `SKILL.md` and `GEMINI.md` together
-so the two entry points stay consistent.
+## The Plugin (the educational on-ramp)
+
+The plugin is how a designer who doesn't yet work with coding agents
+finds out their files aren't ready. It runs inside Figma, scans the
+frame you selected, gives you a score, and shows you exactly which
+components, layers, and tokens are letting the side down. That
+moment — the first time you see a 34/100 on a file you thought was
+clean — is the whole point. Once you've had it, the skill becomes
+the tool you actually use.
+
+The plugin is frozen at v0.1.0. It will keep working, but the
+long-term development effort is in the skill.
+
+### Install (3 minutes)
+
+You need the **Figma desktop app** (not the browser version) to run
+local plugins.
+
+1. Download or clone this folder to your computer
+2. Open any Figma file
+3. Go to: **Plugins → Development → Import plugin from manifest…**
+4. Navigate to the `agent-ready-plugin` folder and select `manifest.json`
+5. Click **Open**
+
+Or install it from [Figma Community](https://www.figma.com/community/plugin/1625957032362797490)
+(published — no setup needed).
+
+### Run it
+
+1. Select a frame on your canvas
+2. Go to: **Plugins → Development → Agent Ready** (or just **Plugins → Agent Ready** if installed from Community)
+3. Click **Scan Frame**
+4. See your score and fix suggestions
+5. Export a markdown report to share with your team
+
+### Tips
+
+- **Start with descriptions.** One sentence per component explaining
+  purpose (not appearance) is the single highest-impact thing you
+  can do.
+- **Fix naming in batches.** Fifteen minutes renaming the children
+  of one frame makes a measurable difference.
+- **Then install the skill.** Once the plugin has shown you the
+  gap, the skill is what closes it.
+
+---
+
+## Why this matters (the short version)
+
+Figma's own 2025 design-systems-and-AI ebook puts it plainly:
+*"Explain the 'why.' Describe each component's purpose and when to
+use it, not just how it looks."* And: *"Store tokens in machine-readable
+formats with consistent naming so colours, spacing, and typography
+map predictably to production variables."*
+
+Both of those are agent-readability requirements dressed up as
+design-system hygiene. Files that don't meet them don't fail loudly —
+they fail quietly, in the form of generic code, wrong component
+names, and missing states. The skill compensates; the plugin teaches
+you to stop needing it.
 
 ---
 
@@ -168,7 +225,12 @@ so the two entry points stay consistent.
 
 Agent Ready is open source under Owl-Listener. Fork it, break it,
 make it better. If you add a check, keep the impact-tier ordering
-and weight system — it's what makes the score meaningful.
+and weighting — it's what makes the score reflect how an agent
+actually experiences the file.
+
+`SKILL.md` is the canonical source for the check logic. If you edit
+checks, update `SKILL.md` and `GEMINI.md` together so the two entry
+points stay consistent.
 
 ---
 
