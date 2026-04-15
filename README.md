@@ -45,7 +45,7 @@ the agent had to guess.
 a designer realise, visually, that their file isn't ready for agent
 collaboration. You run it inside Figma, see a score, see the specific
 gaps, and get a prioritised fix list. That's its job. It's not where
-the long-term value lives — it's the moment you decide to care.
+the long-term value lives.
 
 If you only install one, install the skill.
 
@@ -182,7 +182,7 @@ local plugins.
 4. Navigate to the `agent-ready-plugin` folder and select `manifest.json`
 5. Click **Open**
 
-Or install it from [Figma Community](https://www.figma.com/community/plugin/1625957032362797490)
+Or...coming soon: install it from [Figma Community](https://www.figma.com/community/plugin/1625957032362797490)
 (published — no setup needed).
 
 ### Run it
@@ -202,22 +202,6 @@ Or install it from [Figma Community](https://www.figma.com/community/plugin/1625
   of one frame makes a measurable difference.
 - **Then install the skill.** Once the plugin has shown you the
   gap, the skill is what closes it.
-
----
-
-## Why this matters (the short version)
-
-Figma's own 2025 design-systems-and-AI ebook puts it plainly:
-*"Explain the 'why.' Describe each component's purpose and when to
-use it, not just how it looks."* And: *"Store tokens in machine-readable
-formats with consistent naming so colours, spacing, and typography
-map predictably to production variables."*
-
-Both of those are agent-readability requirements dressed up as
-design-system hygiene. Files that don't meet them don't fail loudly —
-they fail quietly, in the form of generic code, wrong component
-names, and missing states. The skill compensates; the plugin teaches
-you to stop needing it.
 
 ---
 
