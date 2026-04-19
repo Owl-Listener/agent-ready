@@ -37,6 +37,28 @@
 //   parentType?: string,        // type of the parent node — used to tell
 //                               // standalone components from variants
 //                               // inside a component set.
+//
+//   // --- field for component-properties check ---
+//   componentPropertyDefinitions?: object,
+//                               // structured props (boolean/text/instance-swap)
+//                               // on COMPONENT_SET and standalone COMPONENT
+//                               // nodes. An empty object or missing field
+//                               // means the component is relying on variant
+//                               // strings alone, which an agent has to parse.
+//
+//   // --- field for auto-layout check ---
+//   layoutMode?: string,        // "NONE" | "VERTICAL" | "HORIZONTAL" on
+//                               // frames. Missing or "NONE" means absolute
+//                               // positioning, which encodes no intent.
+//
+//   // --- field for real-content check ---
+//   characters?: string,        // the actual text on a TEXT node. Used to
+//                               // spot lorem ipsum, "Label", "$0.00", etc.
+//
+//   // --- fields for accessibility check ---
+//   width?: number,             // frame/section dimensions — used to tell
+//   height?: number,            // big layout frames from small decorative
+//                               //  ones so we don't flag every tiny box.
 // }
 //
 // ============================================================
@@ -59,6 +81,109 @@
 // "Rectangle 4", etc. Case-insensitive.
 const DEFAULT_NAME_PATTERN =
   /^(Frame|Group|Rectangle|Ellipse|Line|Vector|Polygon|Star|Boolean|Slice|Image|Text)\s*\d*$/i;
+
+// Placeholder text patterns — lorem ipsum, generic labels, fake
+// contact info. A TEXT node matching any of these is actively
+// misleading: an agent will name functions and variables as if
+// the UI really does what the placeholder says. The list comes
+// from the plugin's original check and is intentionally strict
+// (full-string match for generic labels so "Label Heading" doesn't
+// false-positive on the word "Label").
+const PLACEHOLDER_PATTERNS = [
+  /lorem\s+ipsum/i,
+  /dolor\s+sit\s+amet/i,
+  /consectetur\s+adipiscing/i,
+  /^placeholder$/i,
+  /^text$/i,
+  /^label$/i,
+  /^title$/i,
+  /^heading$/i,
+  /^subtitle$/i,
+  /^description$/i,
+  /^body\s*text$/i,
+  /^caption$/i,
+  /^your\s+text\s+here$/i,
+  /^type\s+something$/i,
+  /^enter\s+text$/i,
+  /^add\s+text$/i,
+  /^click\s+here$/i,
+  /^\$0\.00$/,
+  /^0\.00$/,
+  /^XX+$/,
+  /^---+$/,
+  /^\.\.\.$/,
+  /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,
+  /^(MM|DD|YYYY|mm|dd|yyyy)[\/\-](MM|DD|YYYY|mm|dd|yyyy)[\/\-](MM|DD|YYYY|mm|dd|yyyy)$/i,
+  /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/(2000|0000)$/,
+  /^(email|name|user|first\.?name|last\.?name)@(example|company|test|domain)\.(com|org|net)$/i,
+  /^(555|000|123)[\s\-]?\d{3}[\s\-]?\d{4}$/,
+  /^(123|000)\s*(main|any|fake)\s*(st|street|ave|road)/i,
+  /^(first|last)\s*name$/i,
+  /^(email|phone)\s*address$/i,
+  /^(user|display)\s*name$/i,
+  /^(company|org)\s*name$/i,
+];
+
+// Component name fragments that signal the component is interactive
+// and therefore owes the user a full set of states (hover, disabled,
+// loading, error). A decorative card does not.
+const INTERACTIVE_KEYWORDS = [
+  'button',
+  'input',
+  'link',
+  'tab',
+  'toggle',
+  'checkbox',
+  'radio',
+  'select',
+];
+
+// Variant values that count as "states" when we look at whether an
+// interactive component is complete. Case-insensitive match against
+// the right-hand side of a variant pair like "State=Hover".
+const STATE_VALUES = [
+  'hover',
+  'pressed',
+  'disabled',
+  'focused',
+  'loading',
+  'error',
+  'active',
+];
+
+// Node types that count as raw shapes for the component-coverage
+// check. A rectangle sitting next to a set of proper instances is
+// almost always an undocumented UI element the agent has to guess at.
+const RAW_SHAPE_TYPES = [
+  'RECTANGLE',
+  'ELLIPSE',
+  'POLYGON',
+  'STAR',
+  'LINE',
+  'VECTOR',
+];
+
+// Naming-consistency heuristics for size variants. We flag a set
+// that mixes the short form (sm/md/lg) with the long form
+// (Small/Medium/Large) because one of them is the one the agent
+// will pick when generating code — and it might not be the one
+// the rest of the codebase uses.
+const SIZE_SHORT_PATTERN = /^(xs|sm|md|lg|xl|xxl)$/i;
+const SIZE_LONG_PATTERN = /^(small|medium|large|extra)/i;
+
+// Accessibility keywords we look for in frame names and descriptions.
+// If a section-sized frame has any of these, we take it as evidence
+// that the designer has thought about semantics, roles, landmarks,
+// or focus — and skip it in the flag list.
+const A11Y_KEYWORDS =
+  /role|landmark|aria|focus|tab.?order|reading.?order|accessible|screen.?reader|semantic/i;
+
+// Thresholds for the whole-file checks, kept at module scope so
+// they're easy to find and tune without hunting through function
+// bodies.
+const MAX_HIERARCHY_DEPTH = 8;
+const SECTION_MIN_WIDTH = 200;
+const SECTION_MIN_HEIGHT = 100;
 
 // Keywords that signal a component description is talking about
 // PURPOSE or USAGE, not just appearance. This is a rough heuristic —
@@ -452,17 +577,616 @@ function checkCodeConnect(root) {
   };
 }
 
+// --------------------------------------------------------------
+// Check 6: Component properties (critical)
+// --------------------------------------------------------------
+// Figma components can carry structured properties — booleans, text
+// fields, instance-swap slots — alongside their variant matrix.
+// A component that exposes `componentPropertyDefinitions` hands the
+// agent a typed API it can map to code. A component that has a grid
+// of variants but no properties hands the agent a set of strings
+// like "Type=Primary, State=Hover" and forces it to parse them out
+// of the variant name. The variant string is a fallback, not a
+// substitute — this check flags the gap so the agent knows to
+// parse and note the inference.
+//
+// A COMPONENT inside a COMPONENT_SET is a variant, not a standalone
+// target. We check the set, not each variant, for the same reason
+// the Code Connect check does.
+
+function checkComponentProperties(root) {
+  const targets = collectNodes(root, (node) => {
+    if (node.type === 'COMPONENT_SET') return true;
+    if (node.type === 'COMPONENT') {
+      return node.parentType !== 'COMPONENT_SET';
+    }
+    return false;
+  });
+
+  const issues = [];
+  let passed = 0;
+
+  for (const component of targets) {
+    const defs = component.componentPropertyDefinitions;
+    const hasProps = defs && typeof defs === 'object' && Object.keys(defs).length > 0;
+
+    if (hasProps) {
+      passed++;
+    } else {
+      issues.push({
+        nodeId: component.id,
+        nodeName: component.name,
+        message:
+          'No boolean, text, or instance-swap properties. The agent will have to parse the variant name string to extract props.',
+        severity: 'critical',
+      });
+    }
+  }
+
+  const total = targets.length;
+  const score = total === 0 ? 100 : Math.round((passed / total) * 100);
+
+  return {
+    id: 'component-properties',
+    label: 'Component properties',
+    impact: 'critical',
+    weight: 4,
+    score,
+    passed,
+    total,
+    issues,
+  };
+}
+
+// --------------------------------------------------------------
+// Check 7: Auto-layout coverage (high)
+// --------------------------------------------------------------
+// A frame with auto-layout encodes intent: this is a row, this is
+// a stack, this wraps. A frame without auto-layout is just absolute
+// coordinates, and the agent has to infer layout by looking at child
+// positions — an easy place for guesses to go wrong. We only flag
+// frames that actually have multiple children, because a one-child
+// frame has nothing to lay out.
+//
+// We include COMPONENT and INSTANCE as well as FRAME because all
+// three can carry auto-layout.
+
+function checkAutoLayout(root) {
+  const frames = collectNodes(root, (node) => {
+    const isFrameLike =
+      node.type === 'FRAME' ||
+      node.type === 'COMPONENT' ||
+      node.type === 'INSTANCE';
+    return (
+      isFrameLike && Array.isArray(node.children) && node.children.length > 1
+    );
+  });
+
+  const issues = [];
+  let passed = 0;
+
+  for (const frame of frames) {
+    const mode = frame.layoutMode;
+    const hasAutoLayout = mode === 'VERTICAL' || mode === 'HORIZONTAL';
+
+    if (hasAutoLayout) {
+      passed++;
+    } else {
+      issues.push({
+        nodeId: frame.id,
+        nodeName: frame.name,
+        message:
+          'Frame has multiple children but no auto-layout. The agent has to infer layout intent from absolute positions.',
+        severity: 'high',
+      });
+    }
+  }
+
+  const total = frames.length;
+  const score = total === 0 ? 100 : Math.round((passed / total) * 100);
+
+  return {
+    id: 'auto-layout',
+    label: 'Auto-layout coverage',
+    impact: 'high',
+    weight: 3,
+    score,
+    passed,
+    total,
+    issues,
+  };
+}
+
+// --------------------------------------------------------------
+// Check 8: Real content (high)
+// --------------------------------------------------------------
+// Lorem ipsum, "Label", "$0.00", fake emails — placeholder content
+// misleads the agent. It names functions and variables based on
+// what the UI appears to say, and every "Label Heading" becomes
+// `labelHeading` in code that nobody wants. We flag text nodes
+// whose content matches any placeholder pattern in the module-level
+// PLACEHOLDER_PATTERNS list.
+
+function checkRealContent(root) {
+  const textNodes = collectNodes(root, (node) => node.type === 'TEXT');
+
+  const issues = [];
+  let passed = 0;
+
+  for (const node of textNodes) {
+    const text = (node.characters || '').trim();
+    if (text === '') {
+      // Empty text is a separate problem, not this check's job.
+      passed++;
+      continue;
+    }
+
+    const matches = PLACEHOLDER_PATTERNS.some((p) => p.test(text));
+    if (matches) {
+      issues.push({
+        nodeId: node.id,
+        nodeName: node.name,
+        message:
+          'Placeholder text detected ("' +
+          (text.length > 40 ? text.slice(0, 40) + '…' : text) +
+          '"). The agent will name functions and variables based on this, which reads wrong in real code.',
+        severity: 'high',
+      });
+    } else {
+      passed++;
+    }
+  }
+
+  const total = textNodes.length;
+  const score = total === 0 ? 100 : Math.round((passed / total) * 100);
+
+  return {
+    id: 'real-content',
+    label: 'Real content',
+    impact: 'high',
+    weight: 3,
+    score,
+    passed,
+    total,
+    issues,
+  };
+}
+
+// --------------------------------------------------------------
+// Check 9: State completeness (high)
+// --------------------------------------------------------------
+// Interactive components owe the user a full set of states — at
+// minimum default, hover, and disabled; often focused, loading,
+// and error too. A button with only a "Default" variant forces
+// the agent to fabricate hover and disabled styling from thin air,
+// or to skip them entirely. Both are bad. This check looks at
+// component sets whose names look interactive (button, input, tab,
+// etc.) and counts how many of the STATE_VALUES appear as variant
+// values on their children.
+//
+// The heuristic is deliberately loose: we treat any component set
+// with at least three of the expected states as "complete enough",
+// which matches the plugin's threshold and avoids flagging every
+// interactive component on the planet for missing "loading".
+
+function checkStateCompleteness(root) {
+  const componentSets = collectNodes(
+    root,
+    (node) => node.type === 'COMPONENT_SET'
+  );
+
+  const interactive = componentSets.filter((set) => {
+    const name = (set.name || '').toLowerCase();
+    return INTERACTIVE_KEYWORDS.some((kw) => name.includes(kw));
+  });
+
+  const issues = [];
+  let passed = 0;
+
+  for (const set of interactive) {
+    const values = new Set();
+    const children = Array.isArray(set.children) ? set.children : [];
+    for (const child of children) {
+      const pairs = (child.name || '').split(',').map((p) => p.trim().toLowerCase());
+      for (const pair of pairs) {
+        const [, value] = pair.split('=').map((s) => (s || '').trim());
+        if (value) values.add(value);
+      }
+    }
+
+    const present = STATE_VALUES.filter((s) => values.has(s));
+    if (present.length >= 3) {
+      passed++;
+    } else {
+      const missing = STATE_VALUES.filter((s) => !values.has(s)).slice(0, 3);
+      issues.push({
+        nodeId: set.id,
+        nodeName: set.name,
+        message:
+          'Interactive component is missing states: ' +
+          missing.join(', ') +
+          '. The agent will have to invent these or omit them.',
+        severity: 'high',
+      });
+    }
+  }
+
+  const total = interactive.length;
+  const score = total === 0 ? 100 : Math.round((passed / total) * 100);
+
+  return {
+    id: 'state-completeness',
+    label: 'State completeness',
+    impact: 'high',
+    weight: 3,
+    score,
+    passed,
+    total,
+    issues,
+  };
+}
+
+// --------------------------------------------------------------
+// Check 10: Component coverage (moderate)
+// --------------------------------------------------------------
+// A raw rectangle next to a row of proper instances is almost
+// always an undocumented UI element the agent has to guess at.
+// We only flag raw shapes that live at the frame/page level — not
+// the ones INSIDE a component or instance, because those are
+// building blocks and not the problem. The score is the ratio of
+// instances to (instances + loose raw shapes).
+//
+// We need the path from a node back to the root to tell "loose" from
+// "inside a component", and the canonical shape doesn't carry parent
+// pointers. The cheapest fix is to precompute that containment from
+// the tree itself.
+
+function checkComponentCoverage(root) {
+  const componentishIds = new Set();
+  (function walk(node, insideComponent) {
+    if (insideComponent) {
+      componentishIds.add(node.id);
+    }
+    if (Array.isArray(node.children)) {
+      const nowInside =
+        insideComponent ||
+        node.type === 'COMPONENT' ||
+        node.type === 'COMPONENT_SET' ||
+        node.type === 'INSTANCE';
+      for (const child of node.children) {
+        walk(child, nowInside);
+      }
+    }
+  })(root, false);
+
+  const instances = collectNodes(root, (node) => node.type === 'INSTANCE');
+  const looseRawShapes = collectNodes(root, (node) => {
+    return (
+      RAW_SHAPE_TYPES.includes(node.type) && !componentishIds.has(node.id)
+    );
+  });
+
+  const total = instances.length + looseRawShapes.length;
+  const score = total === 0 ? 100 : Math.round((instances.length / total) * 100);
+
+  const issues = looseRawShapes.map((node) => ({
+    nodeId: node.id,
+    nodeName: node.name,
+    message:
+      'Loose ' +
+      node.type.toLowerCase() +
+      ' sitting outside any component. If this is reusable UI, it should be a component; if not, the agent cannot tell.',
+    severity: 'moderate',
+  }));
+
+  return {
+    id: 'component-coverage',
+    label: 'Component coverage',
+    impact: 'moderate',
+    weight: 2,
+    score,
+    passed: instances.length,
+    total,
+    issues,
+  };
+}
+
+// --------------------------------------------------------------
+// Check 11: Naming consistency (moderate)
+// --------------------------------------------------------------
+// Variants that mix "sm" with "Small" or "Primary" with "primary"
+// force the agent to pick a convention — and it might not pick the
+// one the rest of the codebase uses. We gather every variant
+// property value across every component set and flag any property
+// that mixes the short and long size forms, or the same value in
+// two different cases.
+
+function checkNamingConsistency(root) {
+  const componentSets = collectNodes(
+    root,
+    (node) => node.type === 'COMPONENT_SET'
+  );
+
+  // { propertyName: Set<value> }
+  const propValues = {};
+
+  for (const set of componentSets) {
+    const children = Array.isArray(set.children) ? set.children : [];
+    for (const child of children) {
+      const pairs = (child.name || '').split(',').map((p) => p.trim());
+      for (const pair of pairs) {
+        const [key, value] = pair.split('=').map((s) => (s || '').trim());
+        if (key && value) {
+          if (!propValues[key]) propValues[key] = new Set();
+          propValues[key].add(value);
+        }
+      }
+    }
+  }
+
+  const issues = [];
+  let passed = 0;
+
+  for (const [prop, valueSet] of Object.entries(propValues)) {
+    const values = Array.from(valueSet);
+    const hasShort = values.some((v) => SIZE_SHORT_PATTERN.test(v));
+    const hasLong = values.some((v) => SIZE_LONG_PATTERN.test(v));
+    const lowered = values.map((v) => v.toLowerCase());
+    const caseCollision = new Set(lowered).size < values.length;
+
+    if (hasShort && hasLong) {
+      issues.push({
+        nodeId: prop,
+        nodeName: prop,
+        message:
+          'Property "' +
+          prop +
+          '" mixes short and long size forms (' +
+          values.join(', ') +
+          '). Pick one convention so the agent does not have to.',
+        severity: 'moderate',
+      });
+    } else if (caseCollision) {
+      issues.push({
+        nodeId: prop,
+        nodeName: prop,
+        message:
+          'Property "' +
+          prop +
+          '" has values that only differ in case (' +
+          values.join(', ') +
+          '). Standardise so the agent does not have to normalise.',
+        severity: 'moderate',
+      });
+    } else {
+      passed++;
+    }
+  }
+
+  const total = Object.keys(propValues).length;
+  const score = total === 0 ? 100 : Math.round((passed / total) * 100);
+
+  return {
+    id: 'naming-consistency',
+    label: 'Naming consistency',
+    impact: 'moderate',
+    weight: 2,
+    score,
+    passed,
+    total,
+    issues,
+  };
+}
+
+// --------------------------------------------------------------
+// Check 12: Hierarchy depth (moderate)
+// --------------------------------------------------------------
+// Figma lets designers nest frames inside frames inside frames.
+// Deep nesting usually reflects Figma's layout mechanics, not the
+// DOM the agent should produce. If the agent reads the Figma tree
+// literally, the output ends up with ten layers of meaningless
+// divs. We flag any node deeper than MAX_HIERARCHY_DEPTH from the
+// scan root so the agent knows to flatten its mental model.
+
+function checkHierarchy(root) {
+  const tooDeep = [];
+  let nodeCount = 0;
+
+  (function walk(node, depth) {
+    nodeCount++;
+    if (depth > MAX_HIERARCHY_DEPTH) {
+      tooDeep.push({ node, depth });
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        walk(child, depth + 1);
+      }
+    }
+  })(root, 0);
+
+  const issues = tooDeep.map(({ node, depth }) => ({
+    nodeId: node.id,
+    nodeName: node.name,
+    message:
+      'Node is nested ' +
+      depth +
+      ' levels deep. Most of this depth is Figma scaffolding, not DOM intent — flatten before generating markup.',
+    severity: 'moderate',
+  }));
+
+  const total = nodeCount;
+  const passed = total - tooDeep.length;
+  const score = total === 0 ? 100 : Math.round((passed / total) * 100);
+
+  return {
+    id: 'hierarchy',
+    label: 'Hierarchy depth',
+    impact: 'moderate',
+    weight: 2,
+    score,
+    passed,
+    total,
+    issues,
+  };
+}
+
+// --------------------------------------------------------------
+// Check 13: Page organisation (moderate)
+// --------------------------------------------------------------
+// A single Figma page with hundreds of top-level frames is a wall
+// of noise. The agent has to load all of it into context to find
+// the one frame the user cares about, which burns tokens and
+// invites wrong answers. A file split across a few pages
+// (Foundations / Components / Patterns / Screens) gives the agent
+// a chance to scope down.
+//
+// This check only runs when we have a DOCUMENT node at the root,
+// because only then can we see the page layout. When the agent is
+// scanning a single frame or component set, we return a total of 0
+// and a score of 100 — there's nothing to evaluate.
+
+function checkPageOrganisation(root) {
+  if (!root || root.type !== 'DOCUMENT' || !Array.isArray(root.children)) {
+    return {
+      id: 'page-organisation',
+      label: 'Page organisation',
+      impact: 'moderate',
+      weight: 2,
+      score: 100,
+      passed: 0,
+      total: 0,
+      issues: [],
+    };
+  }
+
+  const pages = root.children.filter((n) => n.type === 'PAGE');
+  const pageCount = pages.length;
+  const maxTopLevelFrames = pages.reduce((max, page) => {
+    const count = Array.isArray(page.children) ? page.children.length : 0;
+    return Math.max(max, count);
+  }, 0);
+
+  let score = 100;
+  if (pageCount === 1 && maxTopLevelFrames > 50) score = 30;
+  else if (pageCount === 1 && maxTopLevelFrames > 30) score = 50;
+  else if (pageCount === 1 && maxTopLevelFrames > 15) score = 70;
+  else if (pageCount === 2) score = 85;
+  // pageCount >= 3 keeps the score at 100.
+
+  const issues = [];
+  if (pageCount === 1 && maxTopLevelFrames > 30) {
+    const only = pages[0];
+    issues.push({
+      nodeId: only.id,
+      nodeName: only.name,
+      message:
+        'Single page with ' +
+        maxTopLevelFrames +
+        ' top-level frames. Split into Foundations / Components / Patterns / Screens so the agent can scope to the relevant section.',
+      severity: 'moderate',
+    });
+  }
+
+  return {
+    id: 'page-organisation',
+    label: 'Page organisation',
+    impact: 'moderate',
+    weight: 2,
+    score,
+    passed: pageCount,
+    total: Math.max(pageCount, 1),
+    issues,
+  };
+}
+
+// --------------------------------------------------------------
+// Check 14: Accessibility annotations (output quality)
+// --------------------------------------------------------------
+// This is the one check that is explicitly about what the AGENT
+// produces, not what it reads. If a large section frame has a
+// description or name that mentions roles, landmarks, reading
+// order, or focus, the agent can apply it; otherwise it falls
+// back to defaults that may or may not be right for the design.
+//
+// We only look at "section-sized" frames (width > SECTION_MIN_WIDTH,
+// height > SECTION_MIN_HEIGHT) because annotating every tiny
+// decorative box would be noise. If width/height are missing from
+// the canonical shape we include the frame anyway — better to flag
+// a few extra than to silently skip a whole file.
+
+function checkAccessibility(root) {
+  const sections = collectNodes(root, (node) => {
+    const isFrameLike =
+      node.type === 'FRAME' ||
+      node.type === 'COMPONENT' ||
+      node.type === 'INSTANCE';
+    if (!isFrameLike) return false;
+    const bigEnough =
+      (typeof node.width !== 'number' || node.width > SECTION_MIN_WIDTH) &&
+      (typeof node.height !== 'number' || node.height > SECTION_MIN_HEIGHT);
+    return bigEnough;
+  });
+
+  const issues = [];
+  let passed = 0;
+
+  for (const section of sections) {
+    const description = (section.description || '').trim();
+    const name = (section.name || '').trim();
+    const annotated =
+      A11Y_KEYWORDS.test(description) || A11Y_KEYWORDS.test(name);
+
+    if (annotated) {
+      passed++;
+    } else {
+      issues.push({
+        nodeId: section.id,
+        nodeName: section.name,
+        message:
+          'Section has no landmark, role, reading-order, or focus annotation. The agent will fall back to default semantics.',
+        severity: 'moderate',
+      });
+    }
+  }
+
+  const total = sections.length;
+  const score = total === 0 ? 100 : Math.round((passed / total) * 100);
+
+  return {
+    id: 'accessibility',
+    label: 'Accessibility annotations',
+    impact: 'output',
+    weight: 2,
+    score,
+    passed,
+    total,
+    issues,
+  };
+}
+
 /**
  * Run every check currently implemented and return an array of
- * results. As we port more checks from code.js, we add them here.
+ * results. v0.3.0: all 13 conceptual checks from SKILL.md are now
+ * executable. Description coverage and description quality ship as
+ * two separate functions so quality is scored independently of
+ * presence, giving 14 CheckResults total.
  */
 function runAllChecks(root) {
   return [
     checkDescriptions(root),
     checkDescriptionQuality(root),
     checkLayerNaming(root),
-    checkTokenBinding(root),
+    checkComponentProperties(root),
     checkCodeConnect(root),
+    checkAutoLayout(root),
+    checkTokenBinding(root),
+    checkRealContent(root),
+    checkStateCompleteness(root),
+    checkComponentCoverage(root),
+    checkNamingConsistency(root),
+    checkHierarchy(root),
+    checkPageOrganisation(root),
+    checkAccessibility(root),
   ];
 }
 
@@ -473,8 +1197,27 @@ module.exports = {
   checkLayerNaming,
   checkTokenBinding,
   checkCodeConnect,
+  checkComponentProperties,
+  checkAutoLayout,
+  checkRealContent,
+  checkStateCompleteness,
+  checkComponentCoverage,
+  checkNamingConsistency,
+  checkHierarchy,
+  checkPageOrganisation,
+  checkAccessibility,
   runAllChecks,
   // constants exported so a test could reuse the same keywords
   PURPOSE_KEYWORDS,
   DEFAULT_NAME_PATTERN,
+  PLACEHOLDER_PATTERNS,
+  INTERACTIVE_KEYWORDS,
+  STATE_VALUES,
+  RAW_SHAPE_TYPES,
+  SIZE_SHORT_PATTERN,
+  SIZE_LONG_PATTERN,
+  A11Y_KEYWORDS,
+  MAX_HIERARCHY_DEPTH,
+  SECTION_MIN_WIDTH,
+  SECTION_MIN_HEIGHT,
 };

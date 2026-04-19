@@ -30,7 +30,7 @@
 // new checks added, scoring math changed, report fields reshaped.
 // The agent writes this into the report so a reviewer can tell
 // at a glance which version of the skill produced the output.
-const SKILL_VERSION = '0.2.0';
+const SKILL_VERSION = '0.3.0';
 
 /**
  * Compute a single weighted score across all check results.

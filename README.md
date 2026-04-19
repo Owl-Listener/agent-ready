@@ -108,16 +108,19 @@ recommendations.
 
 - **Accessibility annotations** — Landmarks, roles, focus behaviour.
 
-### v0.2.0: executable verification
+### v0.3.0: executable verification, end to end
 
-As of v0.2.0, the skill ships with a small shared JavaScript module
-(`shared/checks.js`, `shared/report.js`) that implements five of the
-13 checks as pure functions — descriptions, description quality,
-layer naming, token binding, and Code Connect. When the agent has
-the raw Figma node tree in JSON, it can run these checks for real
-instead of eyeballing them, and produce the same scores the plugin
-does for the same file. The other eight checks still use prose
-guidance; they'll be ported as the skill matures.
+As of v0.3.0, the skill ships with a shared JavaScript module
+(`shared/checks.js`, `shared/report.js`) that implements all 13
+checks as pure functions — description coverage *and* quality
+(ported as two separate functions so quality is scored
+independently from presence), layer naming, component properties,
+Code Connect, auto-layout, token binding, real content, state
+completeness, component coverage, naming consistency, hierarchy
+depth, page organisation, and accessibility annotations. When the
+agent has the raw Figma node tree in JSON, it runs the checks for
+real instead of eyeballing them, and produces the same scores the
+plugin does for the same file. The prose-only tier has been retired.
 
 The module also generates the `@agent-ready-report` block — the
 structured comment the agent pastes at the top of any code it
