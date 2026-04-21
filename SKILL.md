@@ -1,12 +1,12 @@
 ---
 name: agent-ready
-version: 0.2.0
+version: 0.3.0
 description: "Assess a Figma file's agent readiness before generating code or modifying designs. Use when reading design context from Figma via MCP, generating code from Figma components, creating or updating components in a Figma file, or when code output quality seems poor and the cause may be file quality. Triggers on: Figma file, design context, generate from Figma, implement this design, messy file, bad output, component code."
 ---
 
 # Agent Ready
 
-*By MC Dean · v0.2.0 · Requires Figma MCP server tools (get_design_context, use_figma, search_design_system)*
+*By MC Dean · v0.3.0 · Requires Figma MCP server tools (get_design_context, use_figma, search_design_system)*
 
 Assess a Figma file's readiness for agent interaction and compensate
 for gaps before generating code or modifying designs. This skill
@@ -59,25 +59,30 @@ Figma MCP server to read your file directly. You can set it up at
 https://github.com/nichochar/open-figma-mcp — or paste your Figma
 file URL and I'll explain what to check manually."
 
-## v0.2.0: Executable verification for 5 of the 13 checks
+## v0.3.0: Executable verification for every check
 
-As of v0.2.0, this skill ships with a small shared JavaScript module
-that implements 5 of the 13 checks as pure functions — descriptions,
-description quality, layer naming, token binding, and Code Connect.
-They live at `shared/checks.js` and `shared/report.js`, run in Node
-with no Figma dependencies, and produce the same scores the Figma
-plugin does for the same file.
+As of v0.3.0, this skill ships with a shared JavaScript module that
+implements all 13 checks as pure functions — description coverage
+*and* quality (ported as two separate functions so quality is scored
+independently from presence), layer naming, component properties,
+Code Connect, auto-layout, token binding, real content, state
+completeness, component coverage, naming consistency, hierarchy
+depth, page organisation, and accessibility annotations. They live
+at `shared/checks.js` and `shared/report.js`, run in Node with no
+Figma dependencies, and produce the same scores the Figma plugin
+does for the same file.
 
 When you have the raw Figma node tree in JSON (from an MCP response
-or a dev-mode export), you can run these checks for real instead of
-eyeballing them. The module also generates an `@agent-ready-report`
-block — a structured comment you paste at the top of any code you
-produce from the file. It records what you saw, what you inferred,
-and how confident you are, so a human reviewer can audit the work.
+or a dev-mode export), run `runAllChecks(root)` from `shared/checks.js`
+instead of eyeballing the file. `shared/report.js` turns the result
+array into an `@agent-ready-report` block — a structured comment you
+paste at the top of any code you produce from the file. It records
+what you saw, what you inferred, and how confident you are, so a
+human reviewer can audit the work.
 
-For the other 8 checks, continue using the prose guidance below.
-The intent is to port them to `shared/checks.js` as the skill
-matures.
+The prose guidance below describes the intent of each check in case
+the node tree is unavailable and you have to assess by hand, but the
+executable module is the authoritative implementation.
 
 ## Instructions
 
@@ -140,7 +145,7 @@ shape:
 ```
 /*
  * @agent-ready-report
- * skill-version: 0.2.0
+ * skill-version: 0.3.0
  * file: [Figma file name]
  * file-score: [0-100]
  * checks-run: [number of checks you actually evaluated]

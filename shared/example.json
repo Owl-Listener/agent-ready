@@ -14,11 +14,19 @@
           "name": "Button",
           "description": "",
           "hasCodeConnect": false,
+          "componentPropertyDefinitions": {},
           "children": [
             {
               "id": "2:1:a",
               "type": "COMPONENT",
-              "name": "Type=Primary, State=Default",
+              "name": "Type=Primary, Size=sm, State=Default",
+              "parentType": "COMPONENT_SET",
+              "description": ""
+            },
+            {
+              "id": "2:1:b",
+              "type": "COMPONENT",
+              "name": "Type=Primary, Size=Small, State=Hover",
               "parentType": "COMPONENT_SET",
               "description": ""
             }
@@ -30,22 +38,42 @@
           "name": "Card",
           "description": "Content container with a title, body text, and an optional action row. Use when you need to group related information on a dashboard. Do not nest cards inside other cards — use a list instead.",
           "hasCodeConnect": true,
+          "componentPropertyDefinitions": {
+            "hasFooter": { "type": "BOOLEAN", "defaultValue": false }
+          },
+          "width": 480,
+          "height": 320,
+          "layoutMode": "VERTICAL",
           "children": [
             {
               "id": "3:1",
               "type": "FRAME",
               "name": "Card Container",
               "layoutMode": "VERTICAL",
+              "width": 480,
+              "height": 320,
               "fills": [{ "type": "SOLID", "visible": true }],
-              "fillStyleId": "S:surface/raised"
-            },
-            {
-              "id": "3:2",
-              "type": "TEXT",
-              "name": "Card Title",
-              "textStyleId": "S:heading/h3",
-              "fills": [{ "type": "SOLID", "visible": true }],
-              "fillStyleId": "S:text/primary"
+              "fillStyleId": "S:surface/raised",
+              "children": [
+                {
+                  "id": "3:1:a",
+                  "type": "TEXT",
+                  "name": "Card Title",
+                  "characters": "Monthly active users",
+                  "textStyleId": "S:heading/h3",
+                  "fills": [{ "type": "SOLID", "visible": true }],
+                  "fillStyleId": "S:text/primary"
+                },
+                {
+                  "id": "3:1:b",
+                  "type": "TEXT",
+                  "name": "Card Body",
+                  "characters": "Lorem ipsum dolor sit amet",
+                  "textStyleId": "S:body/default",
+                  "fills": [{ "type": "SOLID", "visible": true }],
+                  "fillStyleId": "S:text/secondary"
+                }
+              ]
             }
           ]
         },
@@ -55,6 +83,9 @@
           "name": "Avatar",
           "description": "A rounded circular image.",
           "hasCodeConnect": false,
+          "componentPropertyDefinitions": {},
+          "width": 48,
+          "height": 48,
           "children": [
             {
               "id": "4:1",
@@ -69,8 +100,33 @@
           "id": "2:4",
           "type": "FRAME",
           "name": "Frame 247",
+          "width": 1440,
+          "height": 800,
           "fills": [{ "type": "SOLID", "visible": true }],
-          "fillStyleId": ""
+          "fillStyleId": "",
+          "children": [
+            {
+              "id": "2:4:a",
+              "type": "RECTANGLE",
+              "name": "Rectangle 4",
+              "fills": [{ "type": "SOLID", "visible": true }],
+              "fillStyleId": ""
+            },
+            {
+              "id": "2:4:b",
+              "type": "TEXT",
+              "name": "Label",
+              "characters": "Label",
+              "textStyleId": ""
+            },
+            {
+              "id": "2:4:c",
+              "type": "RECTANGLE",
+              "name": "Rectangle 9",
+              "fills": [{ "type": "SOLID", "visible": true }],
+              "fillStyleId": ""
+            }
+          ]
         }
       ]
     }
