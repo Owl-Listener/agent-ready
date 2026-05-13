@@ -185,7 +185,7 @@ local plugins.
 4. Navigate to the `agent-ready-plugin` folder and select `manifest.json`
 5. Click **Open**
 
-Or...coming soon: install it from [Figma Community](https://www.figma.com/community/plugin/1625957032362797490)
+Or...Install it from [Figma Community](https://www.figma.com/community/plugin/1625957032362797490)
 (published — no setup needed).
 
 ### Run it
